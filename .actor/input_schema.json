@@ -1,0 +1,35 @@
+{
+    "title": "Job Search AI Agent",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "jobPreferences": {
+            "title": "Job Preferences",
+            "type": "string",
+            "description": "Your job preferences (i.e. remote, title, location, etc.)",
+            "editor": "textfield",
+            "prefill": "I'm looking for remote software engineering roles in San Francisco, CA."
+        },
+        "OPENAI_API_KEY": {
+            "title": "OpenAI API Key",
+            "type": "string",
+            "description": "The API key to use for prompting ChatGPT.",
+            "editor": "textfield"
+        },
+        "resumePath": {
+            "title": "Resume URL Path",
+            "type": "string",
+            "description": "The URL of the resume to parse.",
+            "editor": "textfield"
+        },
+        "platform": {
+            "title": "Platform",
+            "type": "string",
+            "enum": ["indeed", "glassdoor", "linkedin", "test"],
+            "description": "Job platform to return.",
+            "editor": "select",
+            "prefill": "indeed"
+        }
+    },
+    "required": ["OPENAI_API_KEY", "jobPreferences", "resumePath"]
+}
