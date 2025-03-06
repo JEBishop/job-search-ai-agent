@@ -8,12 +8,12 @@
             "type": "string",
             "description": "Your job preferences (i.e. remote, title, location, etc.)",
             "editor": "textfield",
-            "prefill": "I'm looking for remote software engineering roles in San Francisco, CA."
+            "prefill": "I'm looking for remote software engineering roles in California."
         },
         "OPENAI_API_KEY": {
             "title": "OpenAI API Key",
             "type": "string",
-            "description": "The API key to use for prompting ChatGPT.",
+            "description": "The API key to use for prompting ChatGPT. You will be charged for usage if you don't supply your own API key.",
             "editor": "textfield"
         },
         "resumePath": {
@@ -25,11 +25,11 @@
         "platform": {
             "title": "Platform",
             "type": "string",
-            "enum": ["indeed", "glassdoor", "linkedin", "test"],
+            "enum": ["indeed","nowhiteboard"],
             "description": "Job platform to return.",
             "editor": "select",
             "prefill": "indeed"
         }
     },
-    "required": ["OPENAI_API_KEY", "jobPreferences", "resumePath"]
+    "required": ["jobPreferences", "platform"]
 }
