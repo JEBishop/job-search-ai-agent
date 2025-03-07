@@ -2,9 +2,8 @@ import { Actor } from 'apify';
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, MessageContentComplex } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import type { Input } from './types.js';
+import type { Input, Job } from './types.js';
 import { agentTools } from './tools.js'
-import fs from 'fs';
 
 await Actor.init();
 const input = await Actor.getInput<Input>();
@@ -87,6 +86,7 @@ try {
    * Ex: { "results": [<< our data array >>] }
    * Need to handle these edge cases gracefully in order to guarantee consistent output for users.
    */
+  var output: Job[] = [];
   if (typeof content === 'string') {
     try {
       const parsedContent = JSON.parse(content) as MessageContentComplex[];
@@ -96,19 +96,17 @@ try {
         const matchingKey = possibleKeys.find(key => key in parsedContent as any);
         
         if (matchingKey) {
-          content = (parsedContent as any)[matchingKey];
+          output = (parsedContent as any)[matchingKey] as Job[];
         } else {
-          content = parsedContent;
+          output = parsedContent as Job[];
         }
       } else {
-        content = parsedContent; 
+        output = parsedContent as Job[]; 
       }
     } catch (error) {
       console.error("Failed to parse JSON:", error);
     }
   }
-  const output = Array.isArray(content) ? content: [content];
-
   console.log(output)
 
   await Actor.charge({ eventName: 'job-results-output', count: output.length });

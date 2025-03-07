@@ -2,14 +2,12 @@ import { Tool } from '@langchain/core/tools';
 import { Actor } from 'apify';
 import pdfParse from 'pdf-parse';
 import axios from 'axios';
-import { Job, UserPreference, ScraperConfig } from './types.js'
+import { Job, ScraperConfig, ScraperPlatform } from './types.js'
 import { ApifyClient } from 'apify-client';
 
 const client = new ApifyClient({
     token: process.env.APIFY_TOKEN,
 });
-
-type ScraperPlatform = "indeed" | "nowhiteboard";
 
 class ResponseFormatterTool extends Tool {
     name = 'response_formatter';
