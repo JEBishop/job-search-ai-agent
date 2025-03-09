@@ -1,95 +1,94 @@
-import { Tool } from '@langchain/core/tools';
-import { Actor } from 'apify';
+import { tool } from '@langchain/core/tools';
 import pdfParse from 'pdf-parse';
-import axios from 'axios';
-import { Job, ScraperConfig, ScraperPlatform } from './types.js'
 import { ApifyClient } from 'apify-client';
+import { z } from 'zod';
+import log from '@apify/log';
+import { ScraperConfig, ScraperPlatform } from './types.js';
+import axios from 'axios';
+import { Actor } from 'apify';
 
 const client = new ApifyClient({
     token: process.env.APIFY_TOKEN,
 });
 
-class ResponseFormatterTool extends Tool {
-    name = 'response_formatter';
-    description = 'Format the output response. The required format is this: [{ "title": string, "company": string, "location": string, "link": string, "match_score": number, "match_reason": string, "sample_cover_letter: string" }]';
-    async _call(arg: string) {
-      try {
-        let jobs: Job[];
-        if (typeof arg === 'string') {
-          try { jobs = JSON.parse(arg); } 
-          catch (e) { throw new Error('Input string is not valid JSON'); }
-        } else if (Array.isArray(arg)) {
-          jobs = arg as Job[];
-        } else {
-          throw new Error('Input must be array or JSON string');
-        }
-
-        console.log(`Formatting output for ${jobs.length} matched roles.`);
-          
-        const output = jobs.map((job: Job) => ({
-          title: job.title || 'Unknown Title',
-          company: job.company || 'Unknown Company',
-          location: job.location || 'Location not specified',
-          link: job.link || 'URL unknown',
-          match_score: Math.min(Math.max(job.match_score || 0, 0), 100), // Clamp 0-100
-          match_reason: job.match_reason || 'Strong alignment with candidate profile',
-          sample_cover_letter: job.sample_cover_letter || 'Dear Hiring Manager... [DEFAULT]'
-        }));
-
-        return JSON.stringify(output);
-      } catch (error) {
-          console.error('ResponseFormatterTool encountered an error:', error);
-          throw new Error('Response formatting failed');
-      }
+const extractJobPreferences = tool(
+  async(input) => {
+    log.info('in extract_job_preferences');
+    log.info(JSON.stringify(input));
+    return JSON.stringify({
+      jobTitle: input.jobTitle,
+      location: input.location,
+      locjobPreferencesation: input.jobPreferences,
+      platform: input.platform
+    });
+  },
+  {
+    name: 'extract_job_preferences',
+    description: 'Convert the user\'s request into a JSON object.',
+    schema: z.object({
+      jobTitle: z.string().describe('Target job title.'),
+      location: z.string().describe('Target work location.'),
+      jobPreferences: z.string().describe('User\'s job preferences - (remote work, work-from-home, salary, etc).'),
+      platform: z.string().describe('Platform to scrape jobs from.')
+    })
   }
-}
+)
 
-class ExtractResumeTextTool extends Tool {
-  name = 'extract_resume_text';
-  description = 'Extract text from resume PDF. Input: { "resumePath": string }';
-  async _call(arg: string) {
+const callJobScrapersTool = tool(
+  async (input) => {
+    log.info('in call_job_scrapers');
+    log.info(JSON.stringify(input));
     try {
-      const resumePath = arg;
+      const scraper: ScraperConfig = getScraper(input.jobTitle, input.location, input.platform);
+      const run = await client.actor(scraper.actor).call(scraper.data);
+      const { items: listings } = await client.dataset(run.defaultDatasetId).listItems();
+    
+      log.info(`Found ${listings.length} ${input.jobTitle} from ${input.platform}.`);
+      return JSON.stringify(listings);
+    } catch (err: any) {
+      log.error('call_job_scrapers error: ' + err.message);
+      return JSON.stringify([]);
+    }
+  },
+  {
+    name: 'call_job_scrapers',
+    description: 'Fetch job listings.',
+    schema: z.object({
+      jobTitle: z.string().describe('Target job title. (This should be a job title and not a profession - engineer, not engineering.'),
+      location: z.string().describe('Target work location.'),
+      platform: z.string().describe('Platform to scrape jobs from.')
+    })
+  }
+);
 
-      console.log(`Pulling resume from ${resumePath}`);
-      new URL(resumePath);
+const extractResumeTextTool = tool(
+  async (input) => {
+    log.info('in extract_resume_text');
+    log.info(JSON.stringify(input));
+    try {
+      log.info(`Pulling resume from ${input.resumePath}`);
+      new URL(input.resumePath);
       
-      const response = await axios.get(resumePath, { responseType: 'arraybuffer' });
+      const response = await axios.get(input.resumePath, { responseType: 'arraybuffer' });
       const data = await pdfParse(response.data);
-      console.log('resume pages');
-      console.log(data.numpages);
+
+      log.info('Resume pages: ' + data.numpages);
+
       await Actor.charge({ eventName: 'resume-parse-page', count: data.numpages });
       return JSON.stringify({ resumeText: data.text });
     } catch (err: any) {
-        console.log('Invalid URL or error processing resume:', err.message);
-        return JSON.stringify({ error: err.message });
+      log.error('Invalid URL or error processing resume:', err.message);
+      return JSON.stringify({ error: err.message });
     }
+  },
+  {
+    name: 'extract_resume_test',
+    description: 'Extract text from a PDF resume.',
+    schema: z.object({
+      resumePath: z.string().describe('URL for the resume to extract text from.')
+    })
   }
-}
-
-class CallJobScrapersTool extends Tool {
-  name = 'call_job_scrapers';
-  description = 'Fetch job listings. Input: { "jobTitle": string, "location": string, "link": string, "platform": string }';
-  async _call(arg: string) {
-    const { jobTitle, location, platform } = JSON.parse(arg);
-
-    console.log(`Finding ${jobTitle} roles in ${location} on ${platform}`);
-
-    const scraper: ScraperConfig = getScraper(jobTitle, location, platform);
-
-    try {
-        const run = await client.actor(scraper.actor).call(scraper.data);
-        const { items: jobResults } = await client.dataset(run.defaultDatasetId).listItems();
-        
-        console.log(`Found ${jobResults.length} roles`);
-        
-        return JSON.stringify({ jobResults: jobResults });
-    } catch (err: any) {
-        console.log(err.message);
-        return JSON.stringify([]);
-    }
-  }
-}
+);
 
 function getScraper(jobTitle: string, location: string, platform: string): ScraperConfig {
     const scrapers: Record<ScraperPlatform, ScraperConfig> = {
@@ -105,7 +104,8 @@ function getScraper(jobTitle: string, location: string, platform: string): Scrap
             actor: 'YSaUTFTERTT3Kzncj',
             data: {
                 location: location,
-                results: 10
+                results: 10,
+                jobTitle: jobTitle
             }
         }
     };
@@ -119,7 +119,7 @@ function getScraper(jobTitle: string, location: string, platform: string): Scrap
 }
 
 export const agentTools = [
-  new ExtractResumeTextTool(),
-  new CallJobScrapersTool(),
-  new ResponseFormatterTool()
+  extractJobPreferences,
+  callJobScrapersTool,
+  extractResumeTextTool
 ];

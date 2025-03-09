@@ -1,9 +1,13 @@
 import { Actor } from 'apify';
+import log from '@apify/log';
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage, MessageContentComplex } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import type { Input, Job } from './types.js';
 import { agentTools } from './tools.js'
+import { responseSchema } from './types.js'
+import { setContextVariable } from "@langchain/core/context";
+import { RunnableLambda } from "@langchain/core/runnables";
 
 await Actor.init();
 const input = await Actor.getInput<Input>();
@@ -30,84 +34,47 @@ const agentModel = new ChatOpenAI({
 
 const agent = createReactAgent({
   llm: agentModel,
-  tools: agentTools
+  tools: agentTools,
+  responseFormat: responseSchema
 });
 
 try {
-  const finalState = await agent.invoke(
-    {
-      messages: [
-        new HumanMessage(
-          `Follow these steps carefully and in order.:
+  const handleRunTimeRequestRunnable = RunnableLambda.from(
+    async ({ jobPreferences: jobPreferences, platform: platform, resumePath: resumePath }) => {
+      setContextVariable("jobPreferences", jobPreferences);
+      setContextVariable("platform", platform);
+      setContextVariable("resumePath", resumePath);
+      const modelResponse = await agent.invoke({
+        messages: [new HumanMessage(`
+          Follow these steps carefully and in order.:
 
-            STEP 1: Extract the user's preferences for: "${jobPreferences}" into this format { "jobTitle": string, "location": string, "link": string, "prefs": string }
-            - 'prefs' includes things like salary, remote work, etc.
-             Do not output anything, you will use this information in STEP 3 and STEP 4.
+            STEP 1: Extract user job preferences:
+            - Extract the user's preferences for: "${jobPreferences}" using the extract_job_preferences tool.
 
-            STEP 2: Extract resume text ${resumePath ? `from "${resumePath}"` : ""} using **extract_resume_text**  
-             Do not output anything, you will use this information in STEP 4.
+            STEP 2: Get the user's resume:
+            - Extract the user's resume text ${resumePath ? `from "${resumePath}"` : ""} using the extract_resume_text tool.
 
-            STEP 3: Fetch jobs from platform "${platform}" with the user's requested job title and location using **call_job_scrapers**  
-             Do not output anything, you will use this information in STEP 4.
+            STEP 3: Fetch jobs:
+            - Fetch jobs from platform "${platform}" with the user's requested job title, location, and preferences using the call_job_scrapers tool.
 
             STEP 4: Match Jobs & Generate Output:  
-            - Using the candidate's resume (from STEP 2) and job preferences (from STEP 1), analyze the jobs retrieved in STEP 3.  
-            - Create a JSON array containing ALL relevant job matches (at least 5 if available).
-            - Structure each JSON object in the array with these fields:
-              {
-                "title": "Job Title",
-                "company": "Company Name",
-                "location": "Location",
-                "link": "URL",
-                "match_score": 75,
-                "match_reason": "Brief explanation",
-                "sample_cover_letter": "Cover letter text"
-              }
-            - Call the response_formatter tool ONCE with this complete JSON array.
-            - The response_formatter will return a JSON array.
-            - YOUR FINAL OUTPUT MUST BE THIS JSON ARRAY EXACTLY as returned by response_formatter.
-
-            ⚠ IMPORTANT: The final output must be a valid JSON array containing at least 5 job matches (if available).
-            - This is the FINAL STEP. Do not process further after the formatter returns.
-
-            STOP_CONDITION = Output from response_formatter is returned
-          `
-        )
-      ]
-    }, {
-      recursionLimit: 8
+            - Using the candidate's resume text and job preferences, analyze the fetched jobs. 
+            - Output a JSON array containing ALL relevant job matches (at least 5 if available) and stop any further processing.
+          `)]
+      }, {
+        recursionLimit: 10
+      });
+      return modelResponse.structuredResponse as Job[];
     }
   );
 
-  var content = finalState.messages[finalState.messages.length - 1].content;
+  const output: Job[] = await handleRunTimeRequestRunnable.invoke({ 
+    jobPreferences: jobPreferences,
+    platform: platform,
+    resumePath: resumePath
+  });
 
-  /**
-   * Some GPT models will wrap the output array in an object, despite response formatting and strict prompting.
-   * Ex: { "results": [<< our data array >>] }
-   * Need to handle these edge cases gracefully in order to guarantee consistent output for users.
-   */
-  var output: Job[] = [];
-  if (typeof content === 'string') {
-    try {
-      const parsedContent = JSON.parse(content) as MessageContentComplex[];
-      if (typeof parsedContent === 'object' && parsedContent !== null && !Array.isArray(parsedContent)) {
-        const possibleKeys = ['input', 'output', 'result', 'results', 'response', 'jobs', 'job_matches', 'jobMatches', 'data'];
-        
-        const matchingKey = possibleKeys.find(key => key in parsedContent as any);
-        
-        if (matchingKey) {
-          output = (parsedContent as any)[matchingKey] as Job[];
-        } else {
-          output = parsedContent as Job[];
-        }
-      } else {
-        output = parsedContent as Job[]; 
-      }
-    } catch (error) {
-      console.error("Failed to parse JSON:", error);
-    }
-  }
-  console.log(output)
+  log.info(JSON.stringify(output));
 
   await Actor.charge({ eventName: 'job-results-output', count: output.length });
 
