@@ -11,7 +11,7 @@ const client = new ApifyClient({
     token: process.env.APIFY_TOKEN,
 });
 
-const extractJobPreferences = tool(
+const extractJobPreferencesTool = tool(
   async(input) => {
     log.info('in extract_job_preferences');
     log.info(JSON.stringify(input));
@@ -119,7 +119,7 @@ function getScraper(jobTitle: string, location: string, platform: string): Scrap
 }
 
 export const agentTools = [
-  extractJobPreferences,
+  extractJobPreferencesTool,
   callJobScrapersTool,
   extractResumeTextTool
 ];
