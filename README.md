@@ -9,6 +9,8 @@ Job Search AI Agent is an Apify Actor that automates the process of finding job 
 - **Resume Analysis:** Parses a provided resume to improve job recommendations.
 - **Custom Cover Letter Generation:** Generates personalized cover letters for each matched job.
 
+![Workflow Diagram](agent_flow.png)
+
 ## Input Configuration
 The actor uses the following input parameters:
 
@@ -60,6 +62,7 @@ The actor returns a list of matched job opportunities, including:
 - **AI-Generated Cover Letter**
 
 Example output:
+![Sample output HTML](html_quiz.png)
 ```json
 [
     {

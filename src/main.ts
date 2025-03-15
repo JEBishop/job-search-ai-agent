@@ -3,11 +3,12 @@ import log from '@apify/log';
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import type { Input, Job } from './types.js';
+import type { Input, Job, JobListingsOutput } from './types.js';
 import { agentTools } from './tools.js'
 import { responseSchema } from './types.js'
 import { setContextVariable } from "@langchain/core/context";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { formatMarkdown, formatHtml } from './utils.js';
 
 await Actor.init();
 const input = await Actor.getInput<Input>();
@@ -64,21 +65,29 @@ try {
       }, {
         recursionLimit: 10
       });
-      return modelResponse.structuredResponse as Job[];
+      return modelResponse.structuredResponse as JobListingsOutput;
     }
   );
 
-  const output: Job[] = await handleRunTimeRequestRunnable.invoke({ 
+  const output: JobListingsOutput = await handleRunTimeRequestRunnable.invoke({ 
     jobPreferences: jobPreferences,
     platform: platform,
     resumePath: resumePath
   });
 
+  console.log(output);
+
+  const formattedOutput = {
+    markdown: formatMarkdown(output.listings),
+    html: formatHtml(output.listings),
+    json: output.listings
+  }
+
   log.info(JSON.stringify(output));
 
-  await Actor.charge({ eventName: 'job-results-output', count: output.length });
+  await Actor.charge({ eventName: 'job-results-output', count: formattedOutput.json.length });
 
-  await Actor.pushData(output);
+  await Actor.pushData(formattedOutput);
 } catch (e: any) {
   console.log(e);
   await Actor.pushData({ error: e.message });
