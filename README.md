@@ -62,7 +62,7 @@ The actor returns a list of matched job opportunities, including:
 - **AI-Generated Cover Letter**
 
 Example output:
-![Sample output HTML](html_quiz.png)
+![Sample output HTML](sample_html.png)
 ```json
 [
     {
