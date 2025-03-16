@@ -20,7 +20,8 @@
             "title": "Resume URL Path",
             "type": "string",
             "description": "The URL of the resume to parse.",
-            "editor": "textfield"
+            "editor": "textfield",
+            "prefill": "https://raw.githubusercontent.com/JEBishop/job-search-ai-agent/main/Sample-Resume.pdf"
         },
         "platform": {
             "title": "Platform",
