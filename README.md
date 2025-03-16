@@ -53,6 +53,7 @@ The actor uses the following input parameters:
 ```
 
 ## Output
+### Be sure to check the "Storage > Key-value store output tab for the HTML/MD report files.
 The actor returns a list of matched job opportunities, including:
 - **Title**
 - **Company**

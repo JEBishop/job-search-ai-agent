@@ -75,19 +75,14 @@ try {
     resumePath: resumePath
   });
 
-  console.log(output);
-
-  const formattedOutput = {
-    markdown: formatMarkdown(output.listings),
-    html: formatHtml(output.listings),
-    json: output.listings
-  }
+  await Actor.setValue('job_report.html', formatHtml(output.listings), { contentType: 'text/html' });
+  await Actor.setValue('job_report.md', formatMarkdown(output.listings), { contentType: 'text/markdown' });
 
   log.info(JSON.stringify(output));
 
-  await Actor.charge({ eventName: 'job-results-output', count: formattedOutput.json.length });
+  await Actor.charge({ eventName: 'job-results-output', count: output.listings.length });
 
-  await Actor.pushData(formattedOutput);
+  await Actor.pushData(output);
 } catch (e: any) {
   console.log(e);
   await Actor.pushData({ error: e.message });
